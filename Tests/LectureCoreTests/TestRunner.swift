@@ -2,8 +2,8 @@ import Foundation
 import LectureCore
 
 struct CheckFailure: Error, CustomStringConvertible { let description: String }
-func expect(_ condition: @autoclosure () -> Bool, _ message: String = "Expectation failed", file: StaticString = #filePath, line: UInt = #line) throws {
-    if !condition() { throw CheckFailure(description: "\(file):\(line): \(message)") }
+func expect(_ condition: @autoclosure () throws -> Bool, _ message: String = "Expectation failed", file: StaticString = #filePath, line: UInt = #line) throws {
+    if try !condition() { throw CheckFailure(description: "\(file):\(line): \(message)") }
 }
 func expectThrows(_ action: () throws -> Void, _ predicate: (Error) -> Bool = { _ in true }) throws {
     do { try action() } catch { try expect(predicate(error), "Unexpected error: \(error)"); return }
@@ -16,6 +16,7 @@ func expectThrows(_ action: () throws -> Void, _ predicate: (Error) -> Bool = { 
 @main struct TestRunner {
     @MainActor static func main() async {
         registerCaptureTests()
+        registerStorageTests()
         let filter = CommandLine.arguments.dropFirst().first
         let selected = Checks.cases.filter { filter == nil || $0.0.range(of: filter!, options: .regularExpression) != nil }
         guard !selected.isEmpty else { print("No checks matched"); exit(2) }
