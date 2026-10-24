@@ -24,7 +24,7 @@ public enum CaptureFailure: Error, LocalizedError, Sendable, Equatable {
     }
 }
 public enum CaptureEvent: Sendable { case audio(CapturedAudio), interrupted(CaptureFailure) }
-public struct CaptureOrigin: Sendable { public let hostSeconds: Double }
+public struct CaptureOrigin: Sendable { public let hostSeconds: Double; public init(hostSeconds: Double) { self.hostSeconds = hostSeconds } }
 public protocol CaptureService: Sendable {
     func start(onEvent: @escaping @Sendable (CaptureEvent) -> Void) async throws -> CaptureOrigin
     func stop() async
