@@ -15,6 +15,7 @@ let package = Package(
             name: "LectureRecorder",
             dependencies: ["LectureCore"]
         ),
+        .executableTarget(name: "LectureCoreChecks", dependencies: ["LectureCore"], path: "Tests/LectureCoreTests", exclude: ["README.md"]),
     ],
     swiftLanguageModes: [.v6]
 )
