@@ -21,6 +21,7 @@ func expectThrows(_ action: () throws -> Void, _ predicate: (Error) -> Bool = { 
         registerModelTests()
         registerTranscriptionTests()
         registerCoordinatorTests()
+        registerPresentationTests()
         let filter = CommandLine.arguments.dropFirst().first
         let selected = Checks.cases.filter { filter == nil || $0.0.range(of: filter!, options: .regularExpression) != nil }
         guard !selected.isEmpty else { print("No checks matched"); exit(2) }
