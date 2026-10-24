@@ -1,0 +1,23 @@
+# macOS and editor state
+.DS_Store
+*.xcuserstate
+xcuserdata/
+.idea/
+.vscode/
+
+# Swift build artifacts; commit Package.resolved once dependencies are added.
+.build/
+.swiftpm/
+DerivedData/
+
+# Local planning scratch, recordings, and model downloads
+work/
+.superpowers/
+.env
+.env.*
+!.env.example
+
+# Packaged applications are local deliverables, not source files.
+outputs/*.app/
+outputs/*.dmg
+outputs/*.zip
