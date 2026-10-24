@@ -7,6 +7,14 @@ extension SessionStore {
         for index in sessions.indices {
             do {
                 var session = sessions[index]
+                // Only startup recovery runs this, before jobs/playback are launched.
+                // Keep recordings and unknown files; discard our abandoned job output.
+                let processing = folder(for: session.id).appendingPathComponent("processing")
+                if let leftovers = try? FileManager.default.contentsOfDirectory(at: processing, includingPropertiesForKeys: [.isSymbolicLinkKey]) {
+                    for file in leftovers where ["wav", "partial"].contains(file.pathExtension) && UUID(uuidString: file.deletingPathExtension().lastPathComponent) != nil {
+                        if try file.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true { try FileManager.default.removeItem(at: file) }
+                    }
+                }
                 let audioFolder = folder(for: session.id).appendingPathComponent("audio")
                 let files = try FileManager.default.contentsOfDirectory(at: audioFolder, includingPropertiesForKeys: [.isSymbolicLinkKey])
                 var recovered: [AudioSegment] = []

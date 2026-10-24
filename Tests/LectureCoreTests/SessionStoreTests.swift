@@ -2,6 +2,19 @@ import Foundation
 import LectureCore
 
 @MainActor func registerStorageTests() {
+    Checks.add("Recovery removes abandoned processing files only") {
+        let temp = try TemporaryDirectory(); defer { temp.remove() }
+        let store = SessionStore(root: temp.url)
+        var session = try await store.create(); session.state = .recorded; try await store.save(session)
+        let processing = await store.folder(for: session.id).appendingPathComponent("processing")
+        try FileManager.default.createDirectory(at: processing, withIntermediateDirectories: true)
+        let orphan = processing.appendingPathComponent(UUID().uuidString + ".wav")
+        let unrelated = processing.appendingPathComponent("notes.txt")
+        try Data("temporary".utf8).write(to: orphan); try Data("notes".utf8).write(to: unrelated)
+        _ = try await store.recover()
+        try expect(!FileManager.default.fileExists(atPath: orphan.path))
+        try expect(FileManager.default.fileExists(atPath: unrelated.path))
+    }
     Checks.add("SessionStoreTests.roundTripAndOrdering") {
         let temp = try TemporaryDirectory(); defer { temp.remove() }
         let store = SessionStore(root: temp.url)

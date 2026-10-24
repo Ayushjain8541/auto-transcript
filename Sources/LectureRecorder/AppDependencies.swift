@@ -8,6 +8,7 @@ import LectureCore
     let library: LibraryModel
     let coordinator: SessionCoordinator
     private let lifecycle: SessionLifecycle
+    var isLoading = true
     var modelReady = false
     var permissionGranted = false
     var setupBusy = false
@@ -26,9 +27,10 @@ import LectureCore
     func initialize() async {
         guard !initialized else { return }; initialized = true
         permissionGranted = ChromeCaptureService.hasPermission
-        do { modelReady = try await models.installed() != nil } catch { setupError = error.localizedDescription }
-        showSetup = !modelReady || !permissionGranted
+        var ready = false
+        do { ready = try await models.installed() != nil } catch { setupError = error.localizedDescription }
         await coordinator.restore()
+        modelReady = ready; showSetup = !modelReady || !permissionGranted; isLoading = false
     }
     func prepare() async {
         guard !setupBusy, coordinator.phase == nil else { return }

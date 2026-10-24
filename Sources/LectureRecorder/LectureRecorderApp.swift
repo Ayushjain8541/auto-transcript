@@ -9,7 +9,8 @@ import SwiftUI
             switch loaded {
             case .success(let app):
                 VStack {
-                    if app.showSetup { SetupView(app: app) }
+                    if app.isLoading { ProgressView("Opening library…").padding(40) }
+                    else if app.showSetup { SetupView(app: app) }
                     else { LibraryView(app: app, library: app.library) }
                 }
                 .task { delegate.coordinator = app.coordinator; await app.initialize() }

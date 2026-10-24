@@ -1,51 +1,32 @@
 # Lecture Recorder
 
-A native Mac application being built to record English lecture audio from Chrome and transcribe it locally after you finish watching.
+A free, local macOS app for recording English lecture audio from Chrome and transcribing it after watching. Built for Apple Silicon, macOS 14 or later.
 
-**Status: repository scaffold.** The SwiftUI app shell builds and displays a status screen. Audio capture, model setup, transcription, and the lecture library are not implemented yet.
+1. Open **Lecture Recorder.app** and complete setup: grant capture permission and prepare the speech model.
+2. Play the lecture in Chrome and click **Start recording** in the app or menu bar. Keep other Chrome tabs quiet.
+3. Click **Finish**. The app saves the recording, transcribes it locally, and adds the result to your library.
+4. Play the audio, search or rename lectures, copy the text, or export a `.txt` file. Transcript timestamps follow the recording, including pauses.
 
-## Intended workflow
+The first model setup needs internet and downloads about 630 MB. Recording and transcription then run locally. No paid service, API key, microphone capture, browser extension, or external recorder is required. Allow 3 GB of free space for model preparation; recorded audio uses about 115 MB per hour, plus temporary space for playback/transcription.
 
-1. Click **Start recording** and watch your lecture in Chrome.
-2. Click **Finish**.
-3. Read, play back, copy, or export the transcript.
+**Status:** functional development build. Real Chrome capture and denied-network transcription have been exercised on an M4 Pro. Long-duration, source-exclusion, lecture-quality and some manual lifecycle checks remain outstanding; see [validation](outputs/lecture-recorder-validation.md). Do not interpret passing unit checks as completed acceptance.
 
-The planned application uses ScreenCaptureKit and the free open-source WhisperKit library. Processing and storage stay on your Mac. The first-run model download requires internet; subsequent transcription is designed to run offline. No paid service is planned.
+## Development
 
-## Build the scaffold
-
-Requirements: Apple Silicon Mac, macOS 14 or later, and a Swift 6.2+ development toolchain with the macOS SDK.
-
-```bash
-swift build
-bash scripts/bundle-app.sh debug
+```sh
+swift run LectureCoreChecks
+python3 -m unittest discover -s Tests/Evaluation -v
+bash scripts/bundle-app.sh release
 bash scripts/verify-bundle.sh
-open "outputs/Lecture Recorder.app"
 ```
 
-Use `bash scripts/bundle-app.sh release` for an optimized build. The application is locally ad-hoc signed, for development on your Mac. It does not request capture permission, record audio, or download a model at this stage.
+The standalone app is written to `outputs/Lecture Recorder.app`. Swift 6.2+ and a macOS SDK are needed to build; neither a developer toolchain nor Python is needed to run the app. Tests use a portable Swift check executable because the installed Command Line Tools do not provide XCTest or Swift Testing.
 
-There are no external Swift package dependencies yet. WhisperKit will be introduced at the model-integration step in the plan. See [build details](docs/BUILD.md).
-
-## Repository layout
-
-```text
-Sources/LectureCore/       Shared identity and future capture/storage/transcription services
-Sources/LectureRecorder/  SwiftUI app shell
-Resources/                App bundle metadata
-Tests/LectureCoreTests/   Reserved for the first behavior tests
-scripts/                  Local build and bundle verification
-docs/                     Development notes
-outputs/                  Design, plan, and ignored local app builds
-work/                     Ignored scratch files, test recordings, and model downloads
-```
-
-## Design and implementation
-
+- [Build and troubleshooting guide](docs/BUILD.md)
 - [Approved design](outputs/2026-10-12-lecture-recorder-design.md)
 - [Implementation plan](outputs/2026-10-24-lecture-recorder-implementation-plan.md)
-- [Current scaffold scope](docs/SCAFFOLD.md)
+- [Acceptance evidence](docs/ACCEPTANCE.md)
 
-The next implementation milestone is verified Chrome audio capture. The scaffold does not complete that milestone. Automated behavior tests will be added with the first feature; build and bundle checks are the current verification.
+Data lives in `~/Library/Application Support/LectureRecorder`. Sessions use recoverable ten-second WAV segments and atomic JSON metadata. Models, recordings, caches, credentials, and app bundles are excluded from Git. **Trash** moves an inactive lecture and its audio to macOS Trash; cancellation retains audio for retry.
 
-Keep recordings, downloaded models, credentials, caches, and packaged binaries out of Git. The `.gitignore` covers the designated local working and build directories.
+The app uses pinned WhisperKit 1.1.1 and a pinned quantized Whisper large-v3 model. License notices ship in the application resources. Local builds are ad-hoc signed; rebuilding may require renewing macOS capture permission. Public distribution/notarization is outside this project’s current scope.

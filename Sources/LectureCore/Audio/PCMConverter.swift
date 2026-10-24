@@ -57,10 +57,11 @@ public final class PCMConverter {
     private func run(_ converter: AVAudioConverter, input: AVAudioPCMBuffer?, capacity: Int) throws -> [Float] {
         let output = AVAudioPCMBuffer(pcmFormat: converter.outputFormat, frameCapacity: AVAudioFrameCount(capacity))!
         let source = ConverterInput(input)
+        let ending = input == nil
         var error: NSError?
         let status = converter.convert(to: output, error: &error) { _, state in
             if let next = source.take() { state.pointee = .haveData; return next }
-            state.pointee = input == nil ? .endOfStream : .noDataNow; return nil
+            state.pointee = ending ? .endOfStream : .noDataNow; return nil
         }
         if status == .error { throw error ?? CaptureFailure.invalidAudio as NSError }
         return Array(UnsafeBufferPointer(start: output.floatChannelData![0], count: Int(output.frameLength)))

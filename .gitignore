@@ -21,3 +21,6 @@ work/
 outputs/*.app/
 outputs/*.dmg
 outputs/*.zip
+
+__pycache__/
+*.pyc
