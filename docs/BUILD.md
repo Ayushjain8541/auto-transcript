@@ -1,42 +1,43 @@
 # Building Lecture Recorder
 
-## Development prerequisites
+Tested toolchain: Swift 6.3.2 with Apple Command Line Tools on Apple Silicon/macOS 26.6.2. Minimum target: macOS 14. Other macOS versions have not been manually validated. Full Xcode is not required for this build route.
 
-- Apple Silicon Mac.
-- macOS 14 or later.
-- Swift 6.2 or later with a macOS SDK.
+## Build and checks
 
-Inspect the selected toolchain with `xcrun swift --version` and `xcode-select -p`. The scaffold uses Swift Package Manager directly, so the bundle script does not require `xcodebuild` or a generated Xcode project. Full transcription integration may introduce additional toolchain requirements that must be validated separately.
+Run from the repository root:
 
-## Commands
-
-```bash
-# Compile the package.
-swift build
-
-# Build, locally sign, and verify the arm64 app bundle.
-bash scripts/bundle-app.sh debug
-
-# Build an optimized version at the same location.
+```sh
+swift package resolve
+swift run LectureCoreChecks
+python3 -m unittest discover -s Tests/Evaluation -v
 bash scripts/bundle-app.sh release
-
-# Check the existing bundle without rebuilding it.
 bash scripts/verify-bundle.sh
-
-# Launch the placeholder app screen.
 open "outputs/Lecture Recorder.app"
 ```
 
-The bundle has identifier `local.ayush.LectureRecorder` and executable name `LectureRecorder`. Use the stable output path when the capture-permission flow is implemented.
+`debug` is also accepted by the bundle script. SwiftPM pins are committed in `Package.resolved`. The script bundles the arm64 executable, model manifest and licenses, then ad-hoc signs and validates the result. It refuses to replace an unrelated app. The app has no dependency on Homebrew, Python, Node or a separately installed transcription executable.
 
-The bundler refuses to replace a symlink or an unrelated item at its destination. It signs and verifies a temporary bundle before replacing a previous build of this app. Verification checks the property list, identity, architecture, executable, local signature, and linked dependency paths. It does not claim notarization or test future capture/transcription behavior.
+The check executable can filter by regular expression, e.g. `swift run LectureCoreChecks 'Coordinator|Audio'`. XCTest and Swift Testing are unavailable in the installed CLT SDK; these behavioral checks execute the same production library without an IDE test runner.
 
-No model resources or third-party runtime libraries are bundled yet. Add their packaging and verification with the corresponding implementation tasks, including SwiftPM resource lookup and license notices.
+## Model assets and offline verification
 
-## Tests
+`python3 scripts/freeze-model.py` reproduces the immutable download manifest and places assets under ignored `work/model-freeze`. It downloads only the chosen model and tokenizer, never records credentials, and never adds weights to Git. Runtime setup puts independently verified assets in `~/Library/Application Support/LectureRecorder/Models`. Setup resumes from verified files. A successful Core ML load is required before a prepared marker is saved.
 
-No feature tests exist in this scaffold. `Tests/LectureCoreTests` reserves their location. Add the `LectureCoreTests` SwiftPM test target when the first meaningful capture tests are written. Until then, use the build and bundle commands above; `swift test` is not a verification command for this scaffold.
+For a developer integration check, prepare the isolated model once, then run a new process with network access denied:
 
-## Local files
+```sh
+LECTURE_REAL_MODEL=1 swift run LectureCoreChecks ModelManager
+LECTURE_REAL_TRANSCRIPTION=1 sandbox-exec -p '(version 1)(allow default)(deny network*)' .build/debug/LectureCoreChecks Transcription
+```
 
-Build products go in `.build/`; packaged apps go in `outputs/`; temporary assets go in `work/`. These generated files are ignored by Git. Design and plan Markdown files under `outputs/` remain tracked.
+The transcription check uses the newest saved user recording and writes results only under ignored `work`. It requires an existing recording. The macOS sandbox tool here restricts the test process; it does not change system networking. It is not needed for normal app use.
+
+## Permissions and troubleshooting
+
+Open the app at a stable path. In setup, use **Allow capture** and follow macOS Screen & System Audio Recording prompts. The app does not request microphone access or save screen video. If permission is denied, use **Open System Settings**. After permission changes, macOS may require quitting and reopening the app.
+
+An ad-hoc signature identifies a particular build by its code hash. Replacing the executable can leave an old approval visible in Settings while the new process still reports denied. If needed, remove the stale Lecture Recorder entry, add the app at its current path, and reopen. This is a development-build limitation, not a requirement during ordinary repeated use of the same app.
+
+If setup fails, retain existing sessions and retry setup after correcting disk/network access. If recording is interrupted, the library retains finalized audio. If inference fails or is cancelled, retry the saved recording. Explicit sleep/lid close can interrupt capture despite the idle-sleep assertion. Search, playback, copying and export operate locally.
+
+Audio requires about 32 KB/second. Playback and inference each assemble a temporary continuous WAV; keep extra disk space available. Temporary job files are cleaned on normal completion/cancellation; interrupted-process cleanup is handled during session recovery.

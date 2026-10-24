@@ -43,6 +43,7 @@ mkdir -p "$staged_app/Contents/MacOS" "$staged_app/Contents/Resources"
 cp "$repo_root/Resources/Info.plist" "$staged_app/Contents/Info.plist"
 cp "$bin_dir/LectureRecorder" "$staged_app/Contents/MacOS/LectureRecorder"
 chmod 755 "$staged_app/Contents/MacOS/LectureRecorder"
+cp -R "$bin_dir/LectureRecorder_LectureCore.bundle" "$staged_app/Contents/Resources/"
 /usr/bin/codesign --force --sign - --timestamp=none "$staged_app"
 bash "$repo_root/scripts/verify-bundle.sh" "$staged_app"
 

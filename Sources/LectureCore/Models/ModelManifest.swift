@@ -19,7 +19,7 @@ public struct ModelManifest: Codable, Sendable {
         self.modelIdentity = modelIdentity; self.sdkVersion = sdkVersion; self.modelRevision = modelRevision; self.tokenizerRevision = tokenizerRevision; self.artifacts = artifacts
     }
     public static func bundled() throws -> Self {
-        guard let url = Bundle.module.url(forResource: "model-manifest", withExtension: "json") else { throw ModelFailure.invalidManifest }
+        guard let url = LectureResources.bundle.url(forResource: "model-manifest", withExtension: "json") else { throw ModelFailure.invalidManifest }
         return try JSONDecoder().decode(Self.self, from: Data(contentsOf: url))
     }
 }
