@@ -5,6 +5,7 @@ import LectureCore
 @MainActor @Observable final class AppDependencies {
     let store: SessionStore
     let models: ModelManager
+    let library: LibraryModel
     let coordinator: SessionCoordinator
     private let lifecycle: SessionLifecycle
     var modelReady = false
@@ -19,6 +20,7 @@ import LectureCore
         let store = SessionStore(root: root.appendingPathComponent("Sessions")); self.store = store
         let models = ModelManager(root: root.appendingPathComponent("Models"), manifest: try .bundled()); self.models = models
         let coordinator = SessionCoordinator(capture: ChromeCaptureService(), store: store, models: models, transcriber: TranscriptionService(), power: PowerAssertion(), clock: { CMClockSeconds.now }, writerFactory: { SegmentWriter(store: store) }); self.coordinator = coordinator
+        library = LibraryModel(store: store, activeID: { coordinator.activeSessionID })
         lifecycle = SessionLifecycle(coordinator: coordinator)
     }
     func initialize() async {

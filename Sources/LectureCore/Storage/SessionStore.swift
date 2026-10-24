@@ -3,9 +3,10 @@ import Foundation
 public actor SessionStore {
     public let root: URL
     public internal(set) var issues: [String] = []
+    let trashItem: @Sendable (URL) throws -> Void
     let writeData: @Sendable (Data, URL) throws -> Void
-    public init(root: URL, writeData: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
-        self.root = root; self.writeData = writeData
+    public init(root: URL, writeData: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }, trashItem: @escaping @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) {
+        self.root = root; self.writeData = writeData; self.trashItem = trashItem
     }
     public func folder(for id: SessionID) -> URL { root.appendingPathComponent(id.uuidString, isDirectory: true) }
     public func create(now: Date = Date(), timeZone: TimeZone = .current) throws -> Session {

@@ -10,7 +10,7 @@ import SwiftUI
             case .success(let app):
                 VStack {
                     if app.showSetup { SetupView(app: app) }
-                    else { RecordingControls(app: app).padding(30) }
+                    else { LibraryView(app: app, library: app.library) }
                 }
                 .task { delegate.coordinator = app.coordinator; await app.initialize() }
                 .toolbar { Button("Setup", systemImage: "gearshape") { app.showSetup.toggle() } }

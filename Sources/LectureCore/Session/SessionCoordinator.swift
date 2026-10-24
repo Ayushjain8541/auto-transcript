@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 @MainActor @Observable public final class SessionCoordinator {
+    public private(set) var activeSessionID: SessionID?
     public private(set) var activeSession: Session?
     public private(set) var phase: SessionState?
     public private(set) var errorMessage: String?
@@ -32,7 +33,7 @@ import Observation
         do {
             guard try await models.installed() != nil else { throw StorageFailure.invalidData("Prepare the local model before recording.") }
             try power.acquire()
-            let session = try await store.create(); activeSession = session
+            let session = try await store.create(); activeSession = session; activeSessionID = session.id
             let folder = await store.folder(for: session.id)
             guard try ModelManager.availableBytes(folder) > 100_000_000 else { throw ModelFailure.insufficientSpace }
             let writer = writerFactory(); self.writer = writer
@@ -72,7 +73,7 @@ import Observation
     }
     public func transcribe(_ id: SessionID) async {
         guard phase == nil else { return }
-        phase = .transcribing; errorMessage = nil
+        phase = .transcribing; errorMessage = nil; activeSessionID = id
         let token = UUID(); job = token
         do {
             let session = try await store.load(id)
@@ -91,7 +92,7 @@ import Observation
             do {
                 try Task.checkCancellation()
                 guard let model = try await self.models.installed() else { throw StorageFailure.invalidData("The local model needs repair. Open setup and retry.") }
-                session.state = .transcribing; try await self.store.save(session); self.activeSession = session
+                session.state = .transcribing; try await self.store.save(session); self.activeSession = session; activeSessionID = session.id
                 let folder = await self.store.folder(for: session.id)
                 guard try ModelManager.availableBytes(folder) > session.capturedFrames * 2 + 100_000_000 else { throw ModelFailure.insufficientSpace }
                 let audio = try await AudioAssembler.assemble(session, at: folder); temporary = audio
@@ -137,7 +138,7 @@ import Observation
     }
     private func clearJob(_ token: UUID) {
         guard job == token else { return }
-        power.release(); job = nil; inference = nil; writer = nil; activeSession = nil; phase = nil
+        power.release(); job = nil; inference = nil; writer = nil; activeSession = nil; activeSessionID = nil; phase = nil
         progress = nil; audioLevel = 0; recordingStartedAt = nil; interruption = nil; revision += 1
     }
 }
