@@ -1,7 +1,7 @@
 # Local lecture recorder for Mac — design specification
 
 Date: 12 October 2026  
-Status: Agreed conversational design; written specification awaiting user review.  
+Status: Written specification approved by the user on 24 October 2026; implementation planning authorized.
 Working name: Lecture Recorder
 
 ## 1. Purpose and success
