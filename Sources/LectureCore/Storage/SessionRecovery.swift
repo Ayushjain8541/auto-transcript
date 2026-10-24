@@ -37,6 +37,12 @@ extension SessionStore {
                 } else if session.state == .transcribing {
                     session.state = .recorded
                 }
+                if !damaged, [.transcribing, .recorded, .complete, .transcriptionFailed].contains(session.state) {
+                    do {
+                        if let transcript = try transcript(session.id) { session.state = .complete; session.modelIdentity = transcript.modelIdentity }
+                        else if session.state == .complete { session.state = .transcriptionFailed }
+                    } catch { session.state = .transcriptionFailed; issues.append("\(session.title): \(error.localizedDescription)") }
+                }
                 if session != sessions[index] { try save(session) }
                 sessions[index] = session
             } catch { issues.append("\(sessions[index].title): \(error.localizedDescription)") }
