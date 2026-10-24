@@ -11,7 +11,7 @@ import LectureCore
         alert.addButton(withTitle: "Keep Working"); alert.addButton(withTitle: "Stop and Quit")
         guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
         Task {
-            if coordinator.phase == .starting || coordinator.phase == .recording { await coordinator.interrupt(reason: "Recording stopped when quitting. Saved audio is available.") }
+            if coordinator.phase == .starting || coordinator.phase == .recording || coordinator.phase == .finalizing { await coordinator.interrupt(reason: "Recording stopped when quitting. Saved audio is available.") }
             // Starting/finalizing may be between awaited operations. Keep the process
             // alive until its owner has reached a cancellable or terminal state.
             while coordinator.phase == .starting || coordinator.phase == .finalizing { try? await Task.sleep(for: .milliseconds(50)) }

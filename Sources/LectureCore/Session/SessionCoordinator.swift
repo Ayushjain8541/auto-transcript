@@ -61,13 +61,21 @@ import Observation
         guard phase == .recording, let writer, let token = job else { return }
         phase = .finalizing
         let end = clock()
-        await capture.stop()
         do {
-            let session = try await writer.finish(atHostSeconds: end)
+            try await writer.freeze(atHostSeconds: end)
+            await capture.stop()
+            var session = try await writer.finish(atHostSeconds: end)
             activeSession = session; revision += 1
             self.writer = nil
+            if let reason = interruption {
+                session.state = .interrupted; session.interruptionReason = reason
+                try await store.save(session); errorMessage = reason; clearJob(token); return
+            }
             await beginInference(session, token: token)
         } catch {
+            _ = writer.accept(.interrupted(.streamStopped))
+            await capture.stop()
+            _ = try? await writer.finish(atHostSeconds: end)
             errorMessage = error.localizedDescription; clearJob(token)
         }
     }
@@ -114,12 +122,13 @@ import Observation
         await operation.value
     }
     public func cancelTranscription() async {
+        if phase == .finalizing { interruption = interruption ?? "Processing was cancelled. Saved audio is available."; return }
         guard phase == .transcribing, let inference else { return }
         inference.cancel()
         await inference.value
     }
     public func interrupt(reason: String) async {
-        if phase == .starting { interruption = reason; return }
+        if phase == .starting || phase == .finalizing { interruption = reason; return }
         guard phase == .recording, let writer, let token = job, let id = activeSession?.id else { return }
         phase = .finalizing
         _ = writer.accept(.interrupted(.streamStopped))

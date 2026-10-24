@@ -18,6 +18,7 @@ public actor SegmentWriter {
     private var fileStart: Int64 = 0
     private var totalWritten: Int64 = 0
     private var lastAudible: Double?
+    private var stopFrame: Int64?
     private var end: Double?
     private var sink: (@Sendable (WriterEvent) -> Void)?
     private var worker: Task<Session, Error>?
@@ -31,8 +32,14 @@ public actor SegmentWriter {
         worker = Task { try await self.pump() }
     }
     public nonisolated func accept(_ event: CaptureEvent) -> Bool { queue.enqueue(event) }
+    public func freeze(atHostSeconds: Double) throws {
+        guard stopFrame == nil else { return }
+        let boundary = try frame(at: atHostSeconds)
+        guard boundary >= timeline.frameCount else { throw StorageFailure.invalidData("Capture timestamps exceeded the Finish time. Available audio was preserved.") }
+        stopFrame = boundary
+    }
     public func finish(atHostSeconds: Double) async throws -> Session {
-        if end == nil { end = atHostSeconds }
+        if end == nil { try freeze(atHostSeconds: atHostSeconds); end = atHostSeconds }
         guard let worker else { throw StorageFailure.invalidData("Writer has not started.") }
         return try await worker.value
     }
@@ -62,6 +69,9 @@ public actor SegmentWriter {
                     try await store.save(session!)
                     return session!
                 }
+                // Freeze the watermark while capture drains. A pending callback may
+                // still supply the tail before Finish; do not replace it with silence.
+                if stopFrame != nil { try await Task.sleep(for: .milliseconds(10)); continue }
                 let watermark = try frame(at: clock()-0.5)
                 // A large unobserved clock jump is suspension, not a normal quiet callback.
                 if watermark - timeline.frameCount > 160_000 { throw StorageFailure.invalidData("Capture was suspended. Available audio was saved.") }
@@ -79,11 +89,15 @@ public actor SegmentWriter {
     }
     private func append(_ block: PCMBlock) async throws {
         let start = try frame(at: block.startSeconds)
+        if let stopFrame, start >= stopFrame { return }
+        guard start - timeline.frameCount <= 160_000 else { throw StorageFailure.invalidData("Capture timestamps jumped after suspension. Available audio was saved.") }
         try await fill(to: start)
-        let data = try timeline.append(block.samples, atFrame: start)
+        let allowed = stopFrame.map { max(0, min(Int64(block.samples.count), $0 - start)) } ?? Int64(block.samples.count)
+        let data = try timeline.append(Array(block.samples.prefix(Int(allowed))), atFrame: start)
         try await write(data)
     }
     private func fill(to target: Int64) async throws {
+        let target = min(target, stopFrame ?? target)
         while timeline.frameCount < target { try await write(timeline.silence(untilFrame: target)) }
     }
     private func write(_ samples: [Float]) async throws {

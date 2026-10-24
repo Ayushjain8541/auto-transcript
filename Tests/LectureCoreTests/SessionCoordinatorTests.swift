@@ -2,6 +2,9 @@ import Foundation
 import LectureCore
 @MainActor final class FakeCapture: CaptureService {
     var starts = 0; var stops = 0
+    var stopDelay = false
+    var stopping = false
+    var releaseStop = false
     var failure: CaptureFailure?
     func start(onEvent: @escaping @Sendable (CaptureEvent) -> Void) async throws -> CaptureOrigin {
         starts += 1
@@ -9,7 +12,10 @@ import LectureCore
         onEvent(.audio(.init(samples: Array(repeating: 0.2, count: 16_000), sampleRate: 16_000, channels: 1, presentationSeconds: 100)))
         return .init(hostSeconds: 100)
     }
-    func stop() async { stops += 1 }
+    func stop() async {
+        stops += 1; stopping = true
+        while stopDelay && !releaseStop { try? await Task.sleep(for: .milliseconds(5)) }
+    }
 }
 actor FakeModels: ModelManaging {
     let url: URL
@@ -67,6 +73,20 @@ actor FakeTranscriber: Transcribing {
         await coordinator.restore()
         let sessions = try await store.list(); try expect(sessions.first?.state == .interrupted)
         try expect(capture.starts == 1 && !power.held && coordinator.phase == nil)
+    }
+    Checks.add("Coordinator sleep during finalization prevents inference") {
+        let temp = try TemporaryDirectory(); defer { temp.remove() }
+        let store = SessionStore(root: temp.url), capture = FakeCapture(), transcriber = FakeTranscriber(), power = FakePower()
+        capture.stopDelay = true
+        let coordinator = SessionCoordinator(capture: capture, store: store, models: FakeModels(temp.url), transcriber: transcriber, power: power, clock: { 101 }, writerFactory: { SegmentWriter(store: store, clock: { 100 }) })
+        await coordinator.start()
+        let finishing = Task { await coordinator.finish() }
+        for _ in 0..<100 { if capture.stopping { break }; try await Task.sleep(for: .milliseconds(5)) }
+        await coordinator.interrupt(reason: "Mac went to sleep"); await coordinator.cancelTranscription()
+        capture.releaseStop = true; await finishing.value
+        let calls = await transcriber.calls; try expect(calls == 0)
+        let saved = try await store.list(); try expect(saved.first?.state == .recorded || saved.first?.state == .interrupted)
+        try expect(coordinator.phase == nil && !power.held)
     }
     Checks.add("Coordinator recovers transcript committed before state") {
         let temp = try TemporaryDirectory(); defer { temp.remove() }

@@ -28,7 +28,7 @@ import CoreGraphics
         if #available(macOS 15, *) { config.captureMicrophone = false }
         let output = ChromeAudioOutput(onEvent: onEvent)
         let stream = SCStream(filter: filter, configuration: config, delegate: output)
-        try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: DispatchQueue(label: "lecture.capture", qos: .userInitiated))
+        try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: output.delivery.queue)
         self.output = output; self.stream = stream
         let origin = CaptureOrigin(hostSeconds: Self.hostSeconds)
         do { try await stream.startCapture() }
@@ -37,19 +37,16 @@ import CoreGraphics
     }
     public func stop() async {
         guard let stream else { return }
-        output?.stopDelivering()
         try? await stream.stopCapture()
+        await output?.delivery.finish()
         self.stream = nil; output = nil
     }
 }
 
 private final class ChromeAudioOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
-    private let onEvent: @Sendable (CaptureEvent) -> Void
-    private let lock = NSLock()
-    private var stopped = false
-    init(onEvent: @escaping @Sendable (CaptureEvent) -> Void) { self.onEvent = onEvent }
-    func stopDelivering() { lock.withLock { stopped = true } }
-    private func deliver(_ event: CaptureEvent) { if !lock.withLock({ stopped }) { onEvent(event) } }
+    let delivery: CaptureDelivery
+    init(onEvent: @escaping @Sendable (CaptureEvent) -> Void) { delivery = CaptureDelivery(onEvent) }
+    private func deliver(_ event: CaptureEvent) { delivery.deliver(event) }
     func stream(_ stream: SCStream, didStopWithError error: any Error) { deliver(.interrupted(.streamStopped)) }
     func stream(_ stream: SCStream, didOutputSampleBuffer buffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio, buffer.isValid, CMSampleBufferDataIsReady(buffer),

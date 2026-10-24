@@ -13,6 +13,7 @@ import SwiftUI
                     else if app.showSetup { SetupView(app: app) }
                     else { LibraryView(app: app, library: app.library) }
                 }
+                .frame(minWidth: 780, minHeight: 500)
                 .task { delegate.coordinator = app.coordinator; await app.initialize() }
                 .toolbar { Button("Setup", systemImage: "gearshape") { app.showSetup.toggle() } }
             case .failure(let error): Text("Lecture Recorder could not start: \(error.localizedDescription)").padding(30).textSelection(.enabled)

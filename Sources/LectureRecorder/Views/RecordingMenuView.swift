@@ -10,6 +10,10 @@ struct RecordingControls: View {
             VStack(alignment: .leading, spacing: 10) {
                 Button(presentation.primaryTitle, systemImage: coordinator.phase == .recording ? "stop.fill" : "record.circle") { Task { await app.primaryAction() } }
                     .buttonStyle(.borderedProminent).disabled(!presentation.canStart && !presentation.canFinish)
+                if coordinator.phase == nil && (!app.modelReady || !app.permissionGranted) {
+                    Text("Complete setup to start recording.").font(.caption).foregroundStyle(.secondary)
+                    Button("Open setup") { app.showSetup = true }
+                }
                 if coordinator.phase == .recording {
                     Text(Duration.seconds(max(0, now - (coordinator.recordingStartedAt ?? now))).formatted(.time(pattern: .hourMinuteSecond))).monospacedDigit()
                     ProgressView(value: Double(coordinator.audioLevel)).accessibilityLabel("Chrome audio level")
