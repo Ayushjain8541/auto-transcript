@@ -22,6 +22,9 @@ fail() {
 binary="$app_path/Contents/MacOS/LectureRecorder"
 [[ -x "$binary" ]] || fail "missing executable"
 [[ "$(/usr/bin/lipo -archs "$binary")" == arm64 ]] || fail "expected arm64 executable"
+resources="$app_path/Contents/Resources/LectureRecorder_LectureCore.bundle"
+[[ -f "$resources/model-manifest.json" ]] || fail "missing model-manifest.json"
+[[ -s "$resources/ThirdPartyNotices.txt" ]] || fail "missing ThirdPartyNotices.txt"
 /usr/bin/codesign --verify --strict "$app_path"
 
 dependencies="$(/usr/bin/otool -L "$binary")"
@@ -32,4 +35,4 @@ while IFS= read -r dependency; do
   esac
 done < <(printf '%s\n' "$dependencies" | /usr/bin/awk 'NR > 1 { print $1 }')
 
-echo "Verified scaffold bundle: $app_path"
+echo "Verified standalone bundle: $app_path"
