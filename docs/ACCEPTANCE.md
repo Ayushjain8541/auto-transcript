@@ -14,3 +14,11 @@ Bundled debug UI: model preparation completed; Transcribe → Cancel returned th
 Release packaging: `bash scripts/bundle-app.sh release` succeeded (75.15 seconds for first optimized dependency build); embedded resources, arm64, dependency paths and strict ad-hoc signature verification passed. Final rebuilt release installation and final-UI capture remain tracked separately.
 
 Final review regression pass: 39/39 Swift checks and 4/4 Python checks. Final release rebuilt after boundary fixes in 6.02 seconds and passed strict bundle verification at the stable original outputs path. The real saved lecture remained complete after reopening.
+
+## Transcription boundary fix — 26 October 2026
+
+A saved 780.07775-second recording reproduced a deterministic validation failure after local inference: the final generated segment ended at 799.1799926757812 seconds. The final silent section also produced hallucinated text. The original 79 WAV segments remained valid and retained throughout recovery. No user audio or transcript content is included in this repository.
+
+The transcription service now clips generated segments to the actual recorded interval and discards text whose interval contains only digital silence. It preserves absolute offsets and retains very quiet nonzero signals above the existing one-PCM-step threshold. Nonfinite, negative, reversed and descending timestamps still fail validation. This is a digital-silence guard, not a general speech/music classifier or an accuracy guarantee.
+
+Regression evidence: both new boundary/silence checks failed before the change and passed afterward; 42/42 Swift checks and 4/4 Python checks pass. The signed release bundle passed verification, was installed at the stable app path, and its existing macOS capture permission was refreshed. Retrying the original recording through the updated application completed successfully with 215 transcript segments; the last segment ends at 719.5999755859375 seconds, with no invented segments in the verified silent tail. The library visibly shows complete. Broader endurance and WER acceptance checks remain outstanding.

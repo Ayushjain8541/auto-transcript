@@ -17,12 +17,20 @@ public struct TranscriptionService: Transcribing {
         var previousStart = 0.0
         var valid: [TranscriptSegment] = []
         for segment in segments {
+            try Task.checkCancellation()
             guard segment.startSeconds.isFinite, segment.endSeconds.isFinite,
-                  segment.startSeconds >= previousStart, segment.endSeconds >= segment.startSeconds,
-                  segment.endSeconds <= duration + 1.0 / 16_000 else { throw StorageFailure.invalidData("Transcription returned invalid timestamps. Audio is retained for retry.") }
+                  segment.startSeconds >= previousStart, segment.endSeconds >= segment.startSeconds
+            else { throw StorageFailure.invalidData("Transcription returned invalid timestamps. Audio is retained for retry.") }
             previousStart = segment.startSeconds
             let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty { valid.append(.init(startSeconds: segment.startSeconds, endSeconds: min(duration, segment.endSeconds), text: text)) }
+            // Whisper timestamps describe padded model windows, so the final
+            // segment can extend past EOF. Only retain its recorded interval.
+            let end = min(duration, segment.endSeconds)
+            guard !text.isEmpty, segment.startSeconds < end else { continue }
+            // A recording may contain speech followed by digital silence. The
+            // whole-file preflight cannot catch hallucinations in those gaps.
+            guard try Self.hasSignal(file, from: segment.startSeconds, to: end) else { continue }
+            valid.append(.init(startSeconds: segment.startSeconds, endSeconds: end, text: text))
         }
         return .init(modelIdentity: model.identity, segments: valid, noSpeech: valid.isEmpty)
     }
@@ -52,10 +60,17 @@ public struct TranscriptionService: Transcribing {
     }
     private static func hasSignal(_ url: URL) throws -> Bool {
         let file = try AVAudioFile(forReading: url)
+        return try hasSignal(file, from: 0, to: Double(file.length) / file.processingFormat.sampleRate)
+    }
+    private static func hasSignal(_ file: AVAudioFile, from start: Double, to end: Double) throws -> Bool {
+        let sampleRate = file.processingFormat.sampleRate
+        file.framePosition = min(file.length, AVAudioFramePosition((start * sampleRate).rounded(.down)))
+        let endFrame = min(file.length, AVAudioFramePosition((end * sampleRate).rounded(.up)))
         let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 16_000)!
-        while file.framePosition < file.length {
+        while file.framePosition < endFrame {
             try Task.checkCancellation()
-            try file.read(into: buffer, frameCount: 16_000)
+            try file.read(into: buffer, frameCount: AVAudioFrameCount(min(16_000, endFrame - file.framePosition)))
+            guard buffer.frameLength > 0 else { throw StorageFailure.invalidData("Recorded audio ended unexpectedly.") }
             guard let channel = buffer.floatChannelData?[0] else { throw CaptureFailure.invalidAudio }
             for index in 0..<Int(buffer.frameLength) where abs(channel[index]) > 1.0 / 32_768 { return true }
         }
