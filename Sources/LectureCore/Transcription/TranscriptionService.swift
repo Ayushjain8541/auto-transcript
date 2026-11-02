@@ -14,14 +14,22 @@ public struct TranscriptionService: Transcribing {
         progress(.preparing)
         let segments = try await decoder(audioURL, model, DecodeRequest(), progress)
         try Task.checkCancellation()
-        var previousStart = 0.0
-        var valid: [TranscriptSegment] = []
-        for segment in segments {
+        // Chunked decoding can return overlapping passages out of start-time
+        // order. Validate each interval, then order it without moving timestamps
+        // or throwing away text. Equal starts retain the decoder's original order.
+        for (index, segment) in segments.enumerated() {
             try Task.checkCancellation()
             guard segment.startSeconds.isFinite, segment.endSeconds.isFinite,
-                  segment.startSeconds >= previousStart, segment.endSeconds >= segment.startSeconds
-            else { throw StorageFailure.invalidData("Transcription returned invalid timestamps. Audio is retained for retry.") }
-            previousStart = segment.startSeconds
+                  segment.startSeconds >= 0, segment.endSeconds >= segment.startSeconds
+            else { throw StorageFailure.invalidData("Transcription returned an invalid interval at passage \(index + 1): \(segment.startSeconds)–\(segment.endSeconds) seconds. Audio is retained for retry.") }
+        }
+        let ordered = segments.enumerated().sorted {
+            $0.element.startSeconds == $1.element.startSeconds
+                ? $0.offset < $1.offset : $0.element.startSeconds < $1.element.startSeconds
+        }
+        var valid: [TranscriptSegment] = []
+        for (_, segment) in ordered {
+            try Task.checkCancellation()
             let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
             // Whisper timestamps describe padded model windows, so the final
             // segment can extend past EOF. Only retain its recorded interval.

@@ -15,7 +15,7 @@ extension SessionStore {
     public func commitTranscript(_ transcript: Transcript, session: Session) throws {
         try Task.checkCancellation()
         try writeData(JSONEncoder().encode(transcript), folder(for: session.id).appendingPathComponent("transcript.json"))
-        var completed = session; completed.state = .complete; completed.modelIdentity = transcript.modelIdentity
+        var completed = session; completed.state = .complete; completed.modelIdentity = transcript.modelIdentity; completed.transcriptionError = nil
         try save(completed)
     }
 }

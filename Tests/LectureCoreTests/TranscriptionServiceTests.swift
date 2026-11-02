@@ -15,7 +15,11 @@ import LectureCore
             let manager = ModelManager(root: modelRoot, manifest: try .bundled())
             guard let model = try await manager.installed() else { throw CheckFailure(description: "Model not prepared") }
             let start = Date()
+            let replay = ProcessInfo.processInfo.environment["LECTURE_REPLAY_RAW"] == "1"
             let diagnosticService = TranscriptionService { audio, model, request, progress in
+                if replay {
+                    return try JSONDecoder().decode([TranscriptSegment].self, from: Data(contentsOf: workspace.appendingPathComponent("work/capture-raw-segments.json")))
+                }
                 let segments = try await TranscriptionService.decodeLocal(audio, model, request, progress)
                 try JSONEncoder().encode(segments).write(to: workspace.appendingPathComponent("work/capture-raw-segments.json"))
                 return segments
@@ -23,8 +27,7 @@ import LectureCore
             let result = try await diagnosticService.run(audioURL: audio, model: model) { _ in }
             try expect(!result.segments.isEmpty, "Expected speech in user capture")
             try JSONEncoder().encode(result).write(to: workspace.appendingPathComponent("work/capture-transcript.json"))
-            print("Real transcription: \(session.duration)s audio, \(Date().timeIntervalSince(start))s inference, \(result.segments.count) segments")
-            print(result.segments.prefix(3).map(\.text).joined(separator: " "))
+            print("\(replay ? "Replayed decoder output" : "Real transcription"): \(session.duration)s audio, \(Date().timeIntervalSince(start))s processing, \(result.segments.count) segments")
         }
         Checks.add("Transcription real silence") {
             let temp = try TemporaryDirectory(); defer { temp.remove() }
@@ -91,14 +94,30 @@ import LectureCore
         let result = try await service.run(audioURL: audio, model: .init(modelFolder: temp.url, tokenizerFolder: temp.url, identity: "test")) { _ in }
         try expect(result.segments == [.init(startSeconds: 0, endSeconds: 1, text: "First"), .init(startSeconds: 2, endSeconds: 3, text: "Quiet speech")])
     }
-    Checks.add("Transcription rejects descending segment timestamps") {
+    Checks.add("Transcription orders overlapping passages without losing text or changing timestamps") {
         let temp = try TemporaryDirectory(); defer { temp.remove() }
-        let audio = temp.url.appendingPathComponent("audio.wav"); try makeWAV(at: audio, frames: 16_000)
-        let service = TranscriptionService { _, _, _, _ in [.init(startSeconds: 0.5, endSeconds: 0.8, text: "First"), .init(startSeconds: 0.2, endSeconds: 0.4, text: "Bad order")] }
-        do {
-            _ = try await service.run(audioURL: audio, model: .init(modelFolder: temp.url, tokenizerFolder: temp.url, identity: "test")) { _ in }
-            throw CheckFailure(description: "Invalid ordering accepted")
-        } catch is StorageFailure { }
+        let audio = temp.url.appendingPathComponent("audio.wav"); try makeWAV(at: audio, frames: 16_000 * 16)
+        let service = TranscriptionService { _, _, _, _ in [
+            .init(startSeconds: 4.12, endSeconds: 4.4, text: "Brief answer"),
+            .init(startSeconds: 4.1, endSeconds: 9.18, text: "Overlapping response"),
+            .init(startSeconds: 10.3, endSeconds: 11.3, text: "Interjection"),
+            .init(startSeconds: 9.3, endSeconds: 15.64, text: "Longer response"),
+            .init(startSeconds: 9.3, endSeconds: 10, text: "Same timestamp")
+        ] }
+        let result = try await service.run(audioURL: audio, model: .init(modelFolder: temp.url, tokenizerFolder: temp.url, identity: "test")) { _ in }
+        let expected: [TranscriptSegment] = [
+            .init(startSeconds: 4.1, endSeconds: 9.18, text: "Overlapping response"),
+            .init(startSeconds: 4.12, endSeconds: 4.4, text: "Brief answer"),
+            .init(startSeconds: 9.3, endSeconds: 15.64, text: "Longer response"),
+            .init(startSeconds: 9.3, endSeconds: 10, text: "Same timestamp"),
+            .init(startSeconds: 10.3, endSeconds: 11.3, text: "Interjection")
+        ]
+        try expect(result.segments == expected)
+        let store = SessionStore(root: temp.url.appendingPathComponent("sessions"))
+        var session = try await store.create(); session.capturedFrames = 16_000 * 16
+        try await store.save(session); try await store.commitTranscript(result, session: session)
+        let reloaded = try await store.transcript(session.id)
+        try expect(reloaded?.segments == expected, "Ordered overlapping text must survive persistence")
     }
     Checks.add("Transcription cancellation rejects late results") {
         let temp = try TemporaryDirectory(); defer { temp.remove() }

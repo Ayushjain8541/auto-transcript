@@ -100,7 +100,8 @@ import Observation
             do {
                 try Task.checkCancellation()
                 guard let model = try await self.models.installed() else { throw StorageFailure.invalidData("The local model needs repair. Open setup and retry.") }
-                session.state = .transcribing; try await self.store.save(session); self.activeSession = session; activeSessionID = session.id
+                session.state = .transcribing; session.transcriptionError = nil
+                try await self.store.save(session); self.activeSession = session; activeSessionID = session.id
                 let folder = await self.store.folder(for: session.id)
                 guard try ModelManager.availableBytes(folder) > session.capturedFrames * 2 + 100_000_000 else { throw ModelFailure.insufficientSpace }
                 let audio = try await AudioAssembler.assemble(session, at: folder); temporary = audio
@@ -113,6 +114,7 @@ import Observation
                 self.revision += 1
             } catch {
                 session.state = Task.isCancelled || error is CancellationError ? .recorded : .transcriptionFailed
+                session.transcriptionError = session.state == .transcriptionFailed ? error.localizedDescription : nil
                 try? await self.store.save(session)
                 if session.state == .transcriptionFailed { self.errorMessage = error.localizedDescription }
                 self.revision += 1

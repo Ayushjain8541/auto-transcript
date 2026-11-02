@@ -50,6 +50,7 @@ private struct SessionDetailView: View {
                 Text(session.title).font(.title2.bold()).textSelection(.enabled)
                 Text(session.createdAt.formatted(date: .abbreviated, time: .shortened)).font(.callout).foregroundStyle(.secondary)
                 if let reason = session.interruptionReason { Label(reason, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.callout) }
+                if let error = session.transcriptionError { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout).textSelection(.enabled) }
                 HStack {
                     Button(playback.isPlaying ? "Pause" : "Play", systemImage: playback.isPlaying ? "pause.fill" : "play.fill") { playback.isPlaying ? playback.pause() : playback.play() }.disabled(!playback.ready)
                     Slider(value: Binding(get: { playback.position }, set: { playback.seek(to: $0) }), in: 0...max(0.001, playback.duration)).disabled(!playback.ready).accessibilityLabel("Recording position")
