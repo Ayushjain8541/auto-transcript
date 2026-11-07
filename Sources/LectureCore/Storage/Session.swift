@@ -26,6 +26,7 @@ public struct Session: Codable, Sendable, Equatable, Identifiable {
     public var capturedFrames: Int64 = 0
     public var modelIdentity: String?
     public var interruptionReason: String?
+    public var transcriptionError: String?
     public var duration: Double { Double(capturedFrames) / 16_000 }
     public init(id: UUID = UUID(), title: String, createdAt: Date = Date(), timeZoneID: String = TimeZone.current.identifier) {
         self.id = id; self.title = title; self.createdAt = createdAt; self.timeZoneID = timeZoneID

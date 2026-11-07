@@ -39,7 +39,31 @@ actor FakeTranscriber: Transcribing {
     func acquire() throws { held = true }
     func release() { held = false }
 }
+actor RetryTranscriber: Transcribing {
+    var shouldFail = true
+    func allowSuccess() { shouldFail = false }
+    func run(audioURL: URL, model: ModelLocation, progress: @escaping @Sendable (TranscriptionProgress) -> Void) async throws -> Transcript {
+        if shouldFail { throw StorageFailure.invalidData("Diagnostic failure") }
+        return .init(modelIdentity: model.identity, segments: [.init(startSeconds: 0, endSeconds: 0.5, text: "Recovered")], noSpeech: false)
+    }
+}
 @MainActor func registerCoordinatorTests() {
+    Checks.add("Coordinator retains transcription error across reload and clears it on retry") {
+        let temp = try TemporaryDirectory(); defer { temp.remove() }
+        let store = SessionStore(root: temp.url), transcriber = RetryTranscriber()
+        let coordinator = SessionCoordinator(capture: FakeCapture(), store: store, models: FakeModels(temp.url), transcriber: transcriber, power: FakePower(), clock: { 101 }, writerFactory: { SegmentWriter(store: store, clock: { 100 }) })
+        await coordinator.start(); await coordinator.finish()
+        let reopened = SessionStore(root: temp.url)
+        let failed = try await reopened.list()[0]
+        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(failed)) as! [String: Any]
+        try expect(failed.state == .transcriptionFailed && failed.capturedFrames == 16_000)
+        try expect((encoded["transcriptionError"] as? String)?.contains("Diagnostic failure") == true, "Failure detail must survive a fresh store load")
+        await transcriber.allowSuccess(); await coordinator.transcribe(failed.id)
+        let completed = try await reopened.load(failed.id)
+        let saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(completed)) as! [String: Any]
+        try expect(completed.state == .complete && completed.capturedFrames == 16_000)
+        try expect(saved["transcriptionError"] == nil, "Successful retry must clear stale failure detail")
+    }
     Checks.add("Coordinator Finish twice and early capture persist once") {
         let temp = try TemporaryDirectory(); defer { temp.remove() }
         let store = SessionStore(root: temp.url), capture = FakeCapture(), models = FakeModels(temp.url), transcriber = FakeTranscriber(), power = FakePower()
